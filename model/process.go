@@ -12,6 +12,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/google/uuid"
+	"github.com/steventhorne/sheepdog/config"
 )
 
 var (
@@ -21,6 +22,8 @@ var (
 			Foreground(lipgloss.Color("#8ebd6b"))
 	styleErrored = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#e55561"))
+	styleExited = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#cc9057"))
 )
 
 type processStatus string
@@ -60,6 +63,7 @@ type process struct {
 	id      uuid.UUID
 	name    string
 	command []string
+	autorun bool
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -86,11 +90,12 @@ func (m *process) Cancel() {
 	}
 }
 
-func newProcess(id uuid.UUID, name string, command []string) *process {
+func newProcess(config config.ProcessConfig) *process {
 	p := &process{
-		id:       id,
-		name:     name,
-		command:  command,
+		id:       uuid.New(),
+		name:     config.Name,
+		command:  config.Command,
+		autorun:  config.Autorun,
 		status:   statusIdle,
 		inboxCh:  make(chan logEntry, 64),
 		statusCh: make(chan processStatus, 10),
@@ -101,7 +106,11 @@ func newProcess(id uuid.UUID, name string, command []string) *process {
 }
 
 func (m *process) Init() tea.Cmd {
-	return m.Start()
+	if m.autorun {
+		return m.Run()
+	}
+
+	return nil
 }
 
 func (m *process) pullInbox() {
@@ -176,8 +185,9 @@ func (m *process) View() string {
 	var style lipgloss.Style
 	switch m.status {
 	case statusIdle:
-	case statusExited:
 		style = styleIdle
+	case statusExited:
+		style = styleExited
 	case statusErrored:
 		style = styleErrored
 	case statusRunning:
@@ -197,7 +207,7 @@ func (m *process) View() string {
 	return sb.String()
 }
 
-func (m *process) Start() tea.Cmd {
+func (m *process) Run() tea.Cmd {
 	if m.status == statusRunning {
 		m.inboxCh <- logEntry{
 			msg:   fmt.Sprintf("process %q already running", m.name),
@@ -235,7 +245,7 @@ func (m *process) Start() tea.Cmd {
 	go func() {
 		err := cmd.Wait()
 		m.inboxCh <- logEntry{
-			msg:   "Finished",
+			msg:   "exited with code 0",
 			level: logError,
 		}
 		if err != nil {

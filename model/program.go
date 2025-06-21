@@ -3,10 +3,42 @@ package model
 import (
 	"strings"
 
+	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/google/uuid"
 	"github.com/steventhorne/sheepdog/config"
 )
+
+type KeyMap struct {
+	Up    key.Binding
+	Down  key.Binding
+	Run   key.Binding
+	Quit  key.Binding
+	Enter key.Binding
+}
+
+var DefaultKeyMap = KeyMap{
+	Up: key.NewBinding(
+		key.WithKeys("k", "up"),        // actual keybindings
+		key.WithHelp("↑/k", "move up"), // corresponding help text
+	),
+	Down: key.NewBinding(
+		key.WithKeys("j", "down"),
+		key.WithHelp("↓/j", "move down"),
+	),
+	Run: key.NewBinding(
+		key.WithKeys("r"),
+		key.WithHelp("r", "run process"),
+	),
+	Quit: key.NewBinding(
+		key.WithKeys("ctrl+c"),
+		key.WithHelp("ctrl+c", "quit"),
+	),
+	Enter: key.NewBinding(
+		key.WithKeys("enter"),
+		key.WithHelp("enter", "enter"),
+	),
+}
 
 type model struct {
 	processes       []*process
@@ -21,9 +53,8 @@ func NewModel(config config.Config) model {
 	}
 
 	for _, pConfig := range config.Processes {
-		id := uuid.New()
-		p := newProcess(id, pConfig.Name, pConfig.Command)
-		m.processesByID[id] = p
+		p := newProcess(pConfig)
+		m.processesByID[p.id] = p
 		m.processes = append(m.processes, p)
 	}
 
@@ -52,20 +83,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		key := msg.String()
-		if msg.Type == tea.KeyCtrlC {
+		switch {
+		case key.Matches(msg, DefaultKeyMap.Quit):
 			for _, p := range m.processesByID {
 				p.Cancel()
 			}
 			cmds = append(cmds, tea.Quit)
-		} else if key == "j" {
+		case key.Matches(msg, DefaultKeyMap.Down):
 			if !m.processes[m.selectedProcess].showViewport {
 				m.processes[m.selectedProcess].SetSelected(false)
 				m.selectedProcess++
 				m.processes[m.selectedProcess].SetSelected(true)
 				m.selectedProcess = m.selectedProcess % len(m.processes)
 			}
-		} else if key == "k" {
+		case key.Matches(msg, DefaultKeyMap.Up):
 			if !m.processes[m.selectedProcess].showViewport {
 				m.processes[m.selectedProcess].SetSelected(false)
 				m.selectedProcess--
@@ -74,8 +105,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.selectedProcess = m.selectedProcess + len(m.processes)
 				}
 			}
-		} else if msg.Type == tea.KeyEnter {
+		case key.Matches(msg, DefaultKeyMap.Enter):
 			m.processes[m.selectedProcess].showViewport = !m.processes[m.selectedProcess].showViewport
+		case key.Matches(msg, DefaultKeyMap.Run):
+			cmds = append(cmds, m.processes[m.selectedProcess].Run())
 		}
 	}
 
