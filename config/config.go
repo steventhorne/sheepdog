@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 )
 
@@ -10,7 +11,7 @@ type Config struct {
 }
 
 type ProcessConfig struct {
-	Name    string `json:"name"`
+	Name    string   `json:"name"`
 	Command []string `json:"command"`
 }
 
@@ -19,6 +20,9 @@ func LoadConfig(path string) (Config, error) {
 
 	file, err := os.Open(path)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return config, fmt.Errorf("config file '%s' does not exist", path)
+		}
 		return config, err
 	}
 	defer file.Close()
