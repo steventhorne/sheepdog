@@ -5,7 +5,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/viewport"
@@ -64,6 +66,7 @@ type process struct {
 	name    string
 	command []string
 	autorun bool
+	cwd     string
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -96,6 +99,7 @@ func newProcess(config config.ProcessConfig) *process {
 		name:     config.Name,
 		command:  config.Command,
 		autorun:  config.Autorun,
+		cwd:      config.Cwd,
 		status:   statusIdle,
 		inboxCh:  make(chan logEntry, 64),
 		statusCh: make(chan processStatus, 10),
@@ -223,6 +227,17 @@ func (m *process) Run() tea.Cmd {
 		cmd = exec.CommandContext(m.ctx, m.command[0], m.command[1:]...)
 	} else {
 		cmd = exec.CommandContext(m.ctx, m.command[0])
+	}
+
+	if m.cwd != "" {
+		if filepath.IsAbs(m.cwd) {
+			cmd.Dir = m.cwd
+		} else {
+			cwd, err := os.Getwd()
+			if err == nil {
+				cmd.Dir = filepath.Join(cwd, m.cwd)
+			}
+		}
 	}
 
 	stdout, _ := cmd.StdoutPipe()
