@@ -1,0 +1,46 @@
+name: Nightly Build
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # nightly UTC
+  workflow_dispatch:      # allow manual trigger
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [linux, darwin, windows]
+        arch: [amd64, arm64]
+        exclude:           # exclude incompatible combos
+          - os: windows
+            arch: arm64    # Windows arm64 not built here
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.23
+
+      - name: Build binary
+        run: |
+          mkdir -p dist
+          EXT=""
+          if [ "${{ matrix.os }}" = "windows" ]; then EXT=".exe"; fi
+          OUTPUT="sheepdog-${{ matrix.os }}-${{ matrix.arch }}$EXT"
+          GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -o "dist/$OUTPUT"
+
+      - name: Upload to nightly release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nightly
+          name: "Nightly Build"
+          draft: false
+          prerelease: true
+          files: |
+            dist/sheepdog-${{ matrix.os }}-${{ matrix.arch }}*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
