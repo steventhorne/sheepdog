@@ -159,7 +159,13 @@ func (m *process) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			sb.WriteString(line.msg)
 			sb.WriteString("\n")
 		}
+
+		atBottom := m.viewport.AtBottom()
 		m.viewport.SetContent(sb.String())
+		if atBottom {
+			m.viewport.GotoBottom()
+		}
+
 		return m, updateProcess(m.id)
 	case tea.WindowSizeMsg:
 		if !m.ready {
@@ -214,7 +220,7 @@ func (m *process) View() string {
 func (m *process) Run() tea.Cmd {
 	if m.status == statusRunning {
 		m.inboxCh <- logEntry{
-			msg:   fmt.Sprintf("process %q already running", m.name),
+			msg:   fmt.Sprintf("Process %q is already running.", m.name),
 			level: logError,
 		}
 		return nil
