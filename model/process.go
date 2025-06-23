@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -228,11 +227,11 @@ func (m *process) Run() tea.Cmd {
 
 	m.ctx, m.cancel = context.WithCancel(context.Background())
 
-	var cmd *exec.Cmd
+	var cmd *Cmd
 	if len(m.command) > 1 {
-		cmd = exec.CommandContext(m.ctx, m.command[0], m.command[1:]...)
+		cmd = NewCommand(m.ctx, m.command[0], m.command[1:]...)
 	} else {
-		cmd = exec.CommandContext(m.ctx, m.command[0])
+		cmd = NewCommand(m.ctx, m.command[0])
 	}
 
 	if m.cwd != "" {
