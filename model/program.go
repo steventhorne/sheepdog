@@ -1,11 +1,9 @@
 package model
 
 import (
-	"strings"
-
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/google/uuid"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/steventhorne/sheepdog/config"
 )
 
@@ -46,79 +44,33 @@ var DefaultKeyMap = KeyMap{
 }
 
 type model struct {
-	processes       []*process
-	processesByID   map[uuid.UUID]*process
-	selectedProcess int
+	processes processList
 }
 
 func NewModel(config config.Config) model {
 	m := model{
-		processes:     make([]*process, 0),
-		processesByID: make(map[uuid.UUID]*process),
-	}
-
-	for _, pConfig := range config.Processes {
-		p := newProcess(pConfig)
-		m.processesByID[p.id] = p
-		m.processes = append(m.processes, p)
+		processes: newProcessList(config),
 	}
 
 	return m
 }
 
 func (m model) Init() tea.Cmd {
-	if len(m.processesByID) > 0 {
-		m.processes[m.selectedProcess].SetSelected(true)
-	}
-
-	cmds := make([]tea.Cmd, 0, len(m.processesByID)+1)
-	for _, p := range m.processesByID {
-		cmd := p.Init()
-		cmds = append(cmds, cmd)
-	}
-	return tea.Batch(cmds...)
+	return m.processes.Init()
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	cmds := make([]tea.Cmd, 0, len(m.processesByID)+1)
-	for _, p := range m.processesByID {
-		_, cmd := p.Update(msg)
-		cmds = append(cmds, cmd)
-	}
+	cmds := make([]tea.Cmd, 0)
+	var cmd tea.Cmd
+
+	_, cmd = m.processes.Update(msg)
+	cmds = append(cmds, cmd)
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch {
 		case key.Matches(msg, DefaultKeyMap.Quit):
-			for _, p := range m.processesByID {
-				p.Cancel()
-			}
 			cmds = append(cmds, tea.Quit)
-		case key.Matches(msg, DefaultKeyMap.Down):
-			if !m.processes[m.selectedProcess].showViewport {
-				m.processes[m.selectedProcess].SetSelected(false)
-				m.selectedProcess++
-				m.processes[m.selectedProcess].SetSelected(true)
-				m.selectedProcess = m.selectedProcess % len(m.processes)
-			}
-		case key.Matches(msg, DefaultKeyMap.Up):
-			if !m.processes[m.selectedProcess].showViewport {
-				m.processes[m.selectedProcess].SetSelected(false)
-				m.selectedProcess--
-				m.processes[m.selectedProcess].SetSelected(true)
-				if m.selectedProcess < 0 {
-					m.selectedProcess = m.selectedProcess + len(m.processes)
-				}
-			}
-		case key.Matches(msg, DefaultKeyMap.Enter):
-			m.processes[m.selectedProcess].showViewport = !m.processes[m.selectedProcess].showViewport
-		case key.Matches(msg, DefaultKeyMap.Run):
-			cmds = append(cmds, m.processes[m.selectedProcess].Run())
-		case key.Matches(msg, DefaultKeyMap.Kill):
-			cmd := m.processes[m.selectedProcess].Kill()
-			if cmd != nil {
-				cmds = append(cmds, cmd)
-			}
 		}
 	}
 
@@ -126,9 +78,5 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
-	sb := &strings.Builder{}
-	for _, p := range m.processes {
-		sb.WriteString(p.View())
-	}
-	return sb.String()
+	return lipgloss.JoinHorizontal(lipgloss.Top, m.processes.View(), m.processes.GetSelectedProcess().viewport.View())
 }

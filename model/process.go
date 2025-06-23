@@ -16,17 +16,6 @@ import (
 	"github.com/steventhorne/sheepdog/config"
 )
 
-var (
-	styleIdle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#a0a8b7"))
-	styleRunning = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#8ebd6b"))
-	styleErrored = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#e55561"))
-	styleExited = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#cc9057"))
-)
-
 type processStatus string
 
 const (
@@ -90,6 +79,10 @@ func (m *process) Cancel() {
 	if m.cancel != nil {
 		m.cancel()
 	}
+}
+
+func (m *process) String() string {
+	return m.name
 }
 
 func newProcess(config config.ProcessConfig) *process {
