@@ -283,6 +283,15 @@ func (m *process) Run() tea.Cmd {
 	return updateProcess(m.id)
 }
 
+func (m *process) Kill() tea.Cmd {
+	if m.status != statusRunning {
+		return nil
+	}
+
+	m.Cancel()
+	return nil
+}
+
 func streamPipeToChan(r io.ReadCloser, ch chan logEntry, level logLevel) {
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {

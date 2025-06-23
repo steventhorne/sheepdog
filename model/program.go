@@ -13,6 +13,7 @@ type KeyMap struct {
 	Up    key.Binding
 	Down  key.Binding
 	Run   key.Binding
+	Kill  key.Binding
 	Quit  key.Binding
 	Enter key.Binding
 }
@@ -29,6 +30,10 @@ var DefaultKeyMap = KeyMap{
 	Run: key.NewBinding(
 		key.WithKeys("r"),
 		key.WithHelp("r", "run process"),
+	),
+	Kill: key.NewBinding(
+		key.WithKeys("x"),
+		key.WithHelp("x", "kill process"),
 	),
 	Quit: key.NewBinding(
 		key.WithKeys("ctrl+c"),
@@ -109,6 +114,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.processes[m.selectedProcess].showViewport = !m.processes[m.selectedProcess].showViewport
 		case key.Matches(msg, DefaultKeyMap.Run):
 			cmds = append(cmds, m.processes[m.selectedProcess].Run())
+		case key.Matches(msg, DefaultKeyMap.Kill):
+			cmd := m.processes[m.selectedProcess].Kill()
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
 		}
 	}
 
