@@ -9,20 +9,8 @@ import (
 	"github.com/charmbracelet/lipgloss/list"
 	"github.com/google/uuid"
 	"github.com/steventhorne/sheepdog/config"
-)
-
-var (
-	styleList = lipgloss.NewStyle().
-		Width(30).
-		Border(lipgloss.NormalBorder(), false, true, false, false)
-	styleIdle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#a0a8b7"))
-	styleRunning = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#8ebd6b"))
-	styleErrored = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#e55561"))
-	styleExited = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#cc9057"))
+	"github.com/steventhorne/sheepdog/input"
+	"github.com/steventhorne/sheepdog/style"
 )
 
 type processList struct {
@@ -73,25 +61,25 @@ func (m *processList) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch {
-		case key.Matches(msg, DefaultKeyMap.Quit):
+		case key.Matches(msg, input.DefaultKeyMap.Quit):
 			for _, p := range m.processes {
 				p.Cancel()
 			}
-		case key.Matches(msg, DefaultKeyMap.Down):
-			if m.selectedProcess < len(m.processes) - 1 {
+		case key.Matches(msg, input.DefaultKeyMap.Down):
+			if m.selectedProcess < len(m.processes)-1 {
 				m.processes[m.selectedProcess].SetSelected(false)
 				m.selectedProcess++
 				m.processes[m.selectedProcess].SetSelected(true)
 			}
-		case key.Matches(msg, DefaultKeyMap.Up):
+		case key.Matches(msg, input.DefaultKeyMap.Up):
 			if m.selectedProcess > 0 {
 				m.processes[m.selectedProcess].SetSelected(false)
 				m.selectedProcess--
 				m.processes[m.selectedProcess].SetSelected(true)
 			}
-		case key.Matches(msg, DefaultKeyMap.Run):
+		case key.Matches(msg, input.DefaultKeyMap.Run):
 			cmds = append(cmds, m.processes[m.selectedProcess].Run())
-		case key.Matches(msg, DefaultKeyMap.Kill):
+		case key.Matches(msg, input.DefaultKeyMap.Kill):
 			cmd := m.processes[m.selectedProcess].Kill()
 			if cmd != nil {
 				cmds = append(cmds, cmd)
@@ -104,15 +92,12 @@ func (m *processList) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *processList) getProcessEnum() list.Enumerator {
 	return func(items list.Items, i int) string {
 		var s string
-		if m.processes[i].selected {
-			s = "- "
-		} else {
-			s = "  "
-		}
 		switch m.processes[i].status {
 		case statusIdle:
 			return s + " "
 		case statusRunning:
+			return s + "R"
+		case statusReady:
 			return s + "R"
 		case statusErrored:
 			return s + "E"
@@ -129,19 +114,31 @@ func (m *processList) getProcessEnumStyle() list.StyleFunc {
 		var s lipgloss.Style
 		switch m.processes[i].status {
 		case statusRunning:
-			s = styleRunning
+			s = style.StyleEnumRunning
+		case statusReady:
+			s = style.StyleEnumReady
 		case statusErrored:
-			s = styleErrored
+			s = style.StyleEnumErrored
 		default:
-			s = styleIdle
+			s = style.StyleEnumIdle
 		}
-		return s.MarginRight(1)
+		return s
 	}
 }
 
 func (m *processList) getProcessItemStyle() list.StyleFunc {
 	return func(items list.Items, i int) lipgloss.Style {
-		s := lipgloss.NewStyle()
+		var s lipgloss.Style
+		switch m.processes[i].status {
+		case statusRunning:
+			s = style.StyleItemRunning
+		case statusReady:
+			s = style.StyleItemReady
+		case statusErrored:
+			s = style.StyleItemErrored
+		default:
+			s = style.StyleItemIdle
+		}
 		if m.processes[i].selected {
 			s = s.Reverse(true)
 		}
@@ -160,5 +157,5 @@ func (m *processList) View() string {
 		EnumeratorStyleFunc(m.getProcessEnumStyle()).
 		ItemStyleFunc(m.getProcessItemStyle())
 
-	return styleList.Render(fmt.Sprint(l))
+	return fmt.Sprintf("\n%s\n%s", style.StyleListHeader.Render("Processes a"), style.StyleList.Render(fmt.Sprint(l)))
 }
