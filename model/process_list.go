@@ -66,12 +66,18 @@ func (m *processList) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				p.Cancel()
 			}
 		case key.Matches(msg, input.DefaultKeyMap.Down):
+			if m.GetSelectedProcess().focused {
+				break
+			}
 			if m.selectedProcess < len(m.processes)-1 {
 				m.processes[m.selectedProcess].SetSelected(false)
 				m.selectedProcess++
 				m.processes[m.selectedProcess].SetSelected(true)
 			}
 		case key.Matches(msg, input.DefaultKeyMap.Up):
+			if m.GetSelectedProcess().focused {
+				break
+			}
 			if m.selectedProcess > 0 {
 				m.processes[m.selectedProcess].SetSelected(false)
 				m.selectedProcess--
@@ -157,5 +163,5 @@ func (m *processList) View() string {
 		EnumeratorStyleFunc(m.getProcessEnumStyle()).
 		ItemStyleFunc(m.getProcessItemStyle())
 
-	return fmt.Sprintf("\n%s\n%s", style.StyleListHeader.Render("Processes a"), style.StyleList.Render(fmt.Sprint(l)))
+	return fmt.Sprintf("\n%s\n%s", style.StyleListHeader.Render("Processes"), style.StyleList.Render(fmt.Sprint(l)))
 }

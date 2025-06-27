@@ -10,6 +10,8 @@ import (
 
 type model struct {
 	processes processList
+	width     int
+	height    int
 }
 
 func NewModel(config config.Config) model {
@@ -37,11 +39,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, input.DefaultKeyMap.Quit):
 			cmds = append(cmds, tea.Quit)
 		}
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
 	}
 
 	return m, tea.Batch(cmds...)
 }
 
 func (m model) View() string {
-	return lipgloss.JoinHorizontal(lipgloss.Top, m.processes.View(), m.processes.GetSelectedProcess().ViewDetails())
+	if m.processes.GetSelectedProcess().focused {
+		return lipgloss.NewStyle().Width(m.width).Height(m.height).Align(lipgloss.Center).Render(m.processes.GetSelectedProcess().viewport.View())
+	}
+	return lipgloss.JoinHorizontal(lipgloss.Top, m.processes.View(), m.processes.GetSelectedProcess().View())
 }

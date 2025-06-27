@@ -12,11 +12,13 @@ import (
 	"strings"
 
 	"github.com/aymanbagabas/go-pty"
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/google/uuid"
 	"github.com/steventhorne/sheepdog/config"
+	"github.com/steventhorne/sheepdog/input"
 	"github.com/steventhorne/sheepdog/style"
 )
 
@@ -72,6 +74,7 @@ type process struct {
 	statusCh chan processStatus
 
 	selected     bool
+	focused      bool
 	ready        bool
 	viewport     viewport.Model
 	showViewport bool
@@ -161,6 +164,11 @@ func (m *process) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	)
 
 	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch {
+		case key.Matches(msg, input.DefaultKeyMap.Enter):
+			m.focused = !m.focused
+		}
 	case processMsg:
 		if msg.id != m.id {
 			return m, nil
@@ -195,15 +203,11 @@ func (m *process) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *process) View() string {
-	return m.name
-}
-
-func (m *process) ViewDetails() string {
 	return style.StyleDetails.Render(lipgloss.JoinVertical(lipgloss.Center, style.StyleDetailsHeader.Width(m.viewport.Width).Render(strings.Join(m.command, " ")), m.viewport.View()))
 }
 
 func (m *process) Run() tea.Cmd {
-	if m.status == statusRunning {
+	if m.status == statusRunning || m.status == statusReady {
 		m.inboxCh <- logEntry{
 			msg:   fmt.Sprintf("Process %q is already running.", m.name),
 			level: logError,
@@ -215,7 +219,7 @@ func (m *process) Run() tea.Cmd {
 
 	var err error
 	m.pty, err = pty.New()
-	m.pty.Resize(10000, 1);
+	m.pty.Resize(10000, 1)
 	if err != nil {
 		m.inboxCh <- logEntry{
 			msg:   err.Error(),
