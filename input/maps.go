@@ -1,3 +1,4 @@
+// Package input defines keyboard input mappings.
 package input
 
 import "github.com/charmbracelet/bubbles/key"

@@ -1,3 +1,4 @@
+// Package config provides configuration loading for Sheepdog.
 package config
 
 import (

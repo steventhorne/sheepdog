@@ -1,3 +1,4 @@
+// Package style defines the visual styling for Sheepdog.
 package style
 
 import "github.com/charmbracelet/lipgloss"

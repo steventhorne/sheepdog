@@ -1,3 +1,4 @@
+// Command sheepdog is the entry point for the Sheepdog application.
 package main
 
 import (

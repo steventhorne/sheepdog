@@ -1,3 +1,4 @@
+// Package model implements the Bubble Tea models and process management for Sheepdog.
 package model
 
 import (
