@@ -88,6 +88,9 @@ func (m *process) Cancel() {
 	if m.cancel != nil {
 		m.cancel()
 	}
+	if m.pty != nil {
+		m.pty.Close()
+	}
 }
 
 func (m *process) String() string {
@@ -301,6 +304,9 @@ func (m *process) Run() tea.Cmd {
 				level: logInfo,
 			}
 			m.statusCh <- statusExited
+		}
+		if m.pty != nil {
+			m.pty.Close()
 		}
 	}()
 
