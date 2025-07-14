@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/aymanbagabas/go-pty"
 	"github.com/charmbracelet/bubbles/key"
@@ -48,12 +49,10 @@ type processMsg struct {
 	id uuid.UUID
 }
 
-func updateProcess(id uuid.UUID) tea.Cmd {
-	return func() tea.Msg {
-		return processMsg{
-			id: id,
-		}
-	}
+func processTick(id uuid.UUID) tea.Cmd {
+	return tea.Tick(100*time.Millisecond, func(t time.Time) tea.Msg {
+		return processMsg{id: id}
+	})
 }
 
 type process struct {
@@ -179,7 +178,10 @@ func (m *process) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		m.loadViewportFromInbox()
 
-		return m, updateProcess(m.id)
+		if len(m.inboxCh) > 0 || len(m.statusCh) > 0 || m.status == statusRunning || m.status == statusReady {
+			return m, processTick(m.id)
+		}
+		return m, nil
 	case tea.WindowSizeMsg:
 		if !m.ready {
 			// Since this program is using the full size of the viewport we
@@ -310,7 +312,7 @@ func (m *process) Run() tea.Cmd {
 		}
 	}()
 
-	return updateProcess(m.id)
+	return processTick(m.id)
 }
 
 func (m *process) Kill() tea.Cmd {
