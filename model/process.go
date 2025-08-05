@@ -87,9 +87,6 @@ func (m *process) Cancel() {
 	if m.cancel != nil {
 		m.cancel()
 	}
-	if m.pty != nil {
-		m.pty.Close()
-	}
 }
 
 func (m *process) String() string {
@@ -223,8 +220,53 @@ func (m *process) Run() tea.Cmd {
 	m.ctx, m.cancel = context.WithCancel(context.Background())
 
 	var err error
-	m.pty, err = pty.New()
-	m.pty.Resize(10000, 1)
+
+	// resolve cmd name
+	cmdPath, err := exec.LookPath(m.command[0])
+	if err != nil {
+		m.inboxCh <- logEntry{
+			msg:   err.Error(),
+			level: logInfo,
+		}
+		m.statusCh <- statusErrored
+		m.loadViewportFromInbox()
+	}
+
+	var cmd *Cmd
+	if len(m.command) > 1 {
+		cmd = NewCommand(m.ctx, cmdPath, m.command[1:]...)
+	} else {
+		cmd = NewCommand(m.ctx, cmdPath)
+	}
+
+	cmd.Env = os.Environ()
+
+	if m.cwd != "" {
+		if filepath.IsAbs(m.cwd) {
+			cmd.Dir = m.cwd
+		} else {
+			cwd, err := os.Getwd()
+			if err == nil {
+				cmd.Dir = filepath.Join(cwd, m.cwd)
+			}
+		}
+	} else {
+		cwd, err := os.Getwd()
+		if err != nil {
+			m.inboxCh <- logEntry{
+				msg:   err.Error(),
+				level: logError,
+			}
+			m.statusCh <- statusErrored
+			m.loadViewportFromInbox()
+		}
+		cmd.Dir = cwd
+	}
+
+	stdout, _ := cmd.StdoutPipe()
+	stderr, _ := cmd.StderrPipe()
+
+	err = cmd.Start()
 	if err != nil {
 		m.inboxCh <- logEntry{
 			msg:   err.Error(),
@@ -232,6 +274,58 @@ func (m *process) Run() tea.Cmd {
 		}
 		m.statusCh <- statusErrored
 		m.loadViewportFromInbox()
+		return nil
+	}
+
+	// TODO: make this running if the config has a ready check
+	m.status = statusReady
+
+	go streamPipeToChan(stdout, m.inboxCh, logInfo)
+	go streamPipeToChan(stderr, m.inboxCh, logError)
+
+	go func() {
+		err := cmd.Wait()
+		if err != nil {
+			m.inboxCh <- logEntry{
+				msg:   fmt.Sprintf("%v", err),
+				level: logError,
+			}
+			m.statusCh <- statusErrored
+		} else {
+			m.inboxCh <- logEntry{
+				msg:   "exited with code 0",
+				level: logInfo,
+			}
+			m.statusCh <- statusExited
+		}
+	}()
+
+	return processTick(m.id)
+}
+
+func (m *process) RunPty() tea.Cmd {
+	if m.status == statusRunning || m.status == statusReady {
+		m.inboxCh <- logEntry{
+			msg:   fmt.Sprintf("Process %q is already running.", m.name),
+			level: logError,
+		}
+		return nil
+	}
+
+	m.ctx, m.cancel = context.WithCancel(context.Background())
+
+	var err error
+	if m.pty == nil {
+		m.pty, err = pty.New()
+		if err != nil {
+			m.inboxCh <- logEntry{
+				msg:   err.Error(),
+				level: logError,
+			}
+			m.statusCh <- statusErrored
+			m.loadViewportFromInbox()
+		}
+		m.pty.Resize(10000, 1)
 	}
 
 	// resolve cmd name
@@ -307,9 +401,6 @@ func (m *process) Run() tea.Cmd {
 			}
 			m.statusCh <- statusExited
 		}
-		if m.pty != nil {
-			m.pty.Close()
-		}
 	}()
 
 	return processTick(m.id)
@@ -322,6 +413,12 @@ func (m *process) Kill() tea.Cmd {
 
 	m.Cancel()
 	return nil
+}
+
+func (m *process) cleanUp() {
+	if m.pty != nil {
+		m.pty.Close()
+	}
 }
 
 var ansiSequence = regexp.MustCompile(`\x1b\[[0-9;?]*[ -~]|\x1b\][^\a]*\a|\x1b\][^\x1b]*\x1b\\`)

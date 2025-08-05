@@ -50,7 +50,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) View() string {
 	if m.processes.GetSelectedProcess().focused {
-		return lipgloss.NewStyle().Width(m.width).Height(m.height).Align(lipgloss.Center).Render(m.processes.GetSelectedProcess().viewport.View())
+		return lipgloss.NewStyle().Width(m.width).Height(m.height).Render(m.processes.GetSelectedProcess().viewport.View())
 	}
 	return lipgloss.JoinHorizontal(lipgloss.Top, m.processes.View(), m.processes.GetSelectedProcess().View())
+}
+
+func (m model) CleanUp() {
+	for _, p := range m.processes.processes {
+		p.cleanUp()
+	}
 }

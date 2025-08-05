@@ -3,6 +3,8 @@ package main
 
 import (
 	"fmt"
+	"log"
+	"log/slog"
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -11,6 +13,15 @@ import (
 )
 
 func main() {
+	f, err := os.OpenFile(".sheepdog.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		log.Fatalf("failed to open log file: %v", err)
+	}
+	defer f.Close()
+
+	handler := slog.NewTextHandler(f, nil)
+	slog.SetDefault(slog.New(handler))
+
 	conf, err := config.LoadConfig(".sheepdog.json")
 	if err != nil {
 		panic(err)
@@ -21,4 +32,6 @@ func main() {
 		fmt.Printf("Whoops, there was an error: %v\n", err)
 		os.Exit(1)
 	}
+
+	m.CleanUp()
 }
