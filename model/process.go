@@ -13,13 +13,11 @@ import (
 	"time"
 
 	"github.com/aymanbagabas/go-pty"
-	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/google/uuid"
 	"github.com/steventhorne/sheepdog/config"
-	"github.com/steventhorne/sheepdog/input"
 	"github.com/steventhorne/sheepdog/style"
 )
 
@@ -39,6 +37,10 @@ const (
 	logInfo  logLevel = "info"
 	logError logLevel = "error"
 )
+
+// logBufferSize is the number of log lines buffered per process before new
+// lines are dropped to keep the reader from blocking.
+const logBufferSize = 1024
 
 type logEntry struct {
 	msg   string
@@ -62,6 +64,10 @@ type process struct {
 	autorun bool
 	cwd     string
 
+	isGroup   bool
+	groupType string
+	children  []*process
+
 	pty    pty.Pty
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -72,15 +78,15 @@ type process struct {
 	inboxCh  chan logEntry
 	statusCh chan processStatus
 
-	selected     bool
-	focused      bool
-	ready        bool
+	isSelected   bool
+	isFocused    bool
+	isReady      bool
 	viewport     viewport.Model
 	showViewport bool
 }
 
-func (m *process) SetSelected(selected bool) {
-	m.selected = selected
+func (m *process) IsFocused() bool {
+	return m.isFocused
 }
 
 func (m *process) Cancel() {
@@ -95,15 +101,18 @@ func (m *process) String() string {
 
 func newProcess(config config.ProcessConfig) *process {
 	p := &process{
-		id:       uuid.New(),
-		name:     config.Name,
-		command:  config.Command,
-		autorun:  config.Autorun,
-		cwd:      config.Cwd,
-		status:   statusIdle,
-		inboxCh:  make(chan logEntry, 64),
-		statusCh: make(chan processStatus, 10),
-		log:      make([]logEntry, 0, 100),
+		id:        uuid.New(),
+		name:      config.Name,
+		command:   config.Command,
+		autorun:   config.Autorun,
+		cwd:       config.Cwd,
+		isGroup:   len(config.Children) > 0,
+		groupType: config.GroupType,
+		children:  make([]*process, 0, len(config.Children)),
+		status:    statusIdle,
+		inboxCh:   make(chan logEntry, logBufferSize),
+		statusCh:  make(chan processStatus, 10),
+		log:       make([]logEntry, 0, 100),
 	}
 
 	return p
@@ -112,6 +121,12 @@ func newProcess(config config.ProcessConfig) *process {
 func (m *process) Init() tea.Cmd {
 	if m.autorun {
 		return m.Run()
+	}
+
+	if m.isGroup {
+		for _, cp := range m.children {
+			cp.Init()
+		}
 	}
 
 	return nil
@@ -162,15 +177,17 @@ func (m *process) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds []tea.Cmd
 	)
 
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch {
-		case key.Matches(msg, input.DefaultKeyMap.Enter):
-			m.focused = !m.focused
+	if m.isGroup {
+		for _, cp := range m.children {
+			_, cmd := cp.Update(msg)
+			cmds = append(cmds, cmd)
 		}
+	}
+
+	switch msg := msg.(type) {
 	case processMsg:
 		if msg.id != m.id {
-			return m, nil
+			return m, tea.Batch(cmds...)
 		}
 
 		m.loadViewportFromInbox()
@@ -178,9 +195,9 @@ func (m *process) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(m.inboxCh) > 0 || len(m.statusCh) > 0 || m.status == statusRunning || m.status == statusReady {
 			return m, processTick(m.id)
 		}
-		return m, nil
+		return m, tea.Batch(cmds...)
 	case tea.WindowSizeMsg:
-		if !m.ready {
+		if !m.isReady {
 			// Since this program is using the full size of the viewport we
 			// need to wait until we've received the window dimensions before
 			// we can initialize the viewport. The initial dimensions come in
@@ -189,14 +206,14 @@ func (m *process) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport = viewport.New(msg.Width+style.WidthViewportOffset, msg.Height+style.HeightViewportOffset)
 			m.viewport.KeyMap.Down.SetEnabled(false)
 			m.viewport.KeyMap.Up.SetEnabled(false)
-			m.ready = true
+			m.isReady = true
 		} else {
 			m.viewport.Width = msg.Width + style.WidthViewportOffset
 			m.viewport.Height = msg.Height + style.HeightViewportOffset
 		}
 	}
 
-	if m.selected {
+	if m.isSelected {
 		m.viewport, cmd = m.viewport.Update(msg)
 		cmds = append(cmds, cmd)
 	}
@@ -208,7 +225,16 @@ func (m *process) View() string {
 	return style.StyleDetails.Render(lipgloss.JoinVertical(lipgloss.Center, style.StyleDetailsHeader.Width(m.viewport.Width).Render(strings.Join(m.command, " ")), m.viewport.View()))
 }
 
+func (m *process) FocusedView() string {
+	return m.viewport.View()
+}
+
 func (m *process) Run() tea.Cmd {
+	// TODO: allow groups to be run
+	if m.isGroup {
+		return nil
+	}
+
 	if m.status == statusRunning || m.status == statusReady {
 		m.inboxCh <- logEntry{
 			msg:   fmt.Sprintf("Process %q is already running.", m.name),
@@ -415,7 +441,7 @@ func (m *process) Kill() tea.Cmd {
 	return nil
 }
 
-func (m *process) cleanUp() {
+func (m *process) CleanUp() {
 	if m.pty != nil {
 		m.pty.Close()
 	}
@@ -439,9 +465,13 @@ func streamPipeToChan(r io.ReadCloser, ch chan logEntry, level logLevel) {
 		line := scanner.Text()
 		clean := stripControlSequencesButKeepSGR(line)
 
-		ch <- logEntry{
-			msg:   clean,
-			level: level,
+		entry := logEntry{msg: clean, level: level}
+		select {
+		case ch <- entry:
+		default:
+			// Drop the log line if the buffer is full to avoid
+			// blocking the reader. This ensures the process stdout
+			// is continually drained even when the UI is busy.
 		}
 	}
 }

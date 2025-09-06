@@ -60,6 +60,13 @@ Key bindings:
 - `enter` - focus on the selected process
 - `ctrl+c` – quit the application
 
+## Logging
+
+Sheepdog buffers process output to avoid blocking commands when the UI is busy.
+Up to 1024 log lines are kept in memory; if the buffer fills, additional lines
+are dropped until space becomes available. This keeps processes responsive at
+the cost of potentially missing some log output.
+
 ## License
 
 Distributed under the terms of the GNU General Public License v3. See the `LICENSE` file for the full license text.

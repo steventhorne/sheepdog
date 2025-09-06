@@ -12,10 +12,12 @@ type Config struct {
 }
 
 type ProcessConfig struct {
-	Name    string   `json:"name"`
-	Command []string `json:"command"`
-	Autorun bool     `json:"autorun"`
-	Cwd     string   `json:"cwd"`
+	Name      string          `json:"name"`
+	Command   []string        `json:"command"`
+	Autorun   bool            `json:"autorun"`
+	Cwd       string          `json:"cwd"`
+	Children  []ProcessConfig `json:"children"`
+	GroupType string          `json:"GroupType"`
 }
 
 func LoadConfig(path string) (Config, error) {

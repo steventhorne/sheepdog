@@ -13,6 +13,9 @@ import (
 )
 
 func main() {
+	title := "sheepdog"
+	fmt.Printf("\033]0;%s\007", title)
+
 	f, err := os.OpenFile(".sheepdog.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		log.Fatalf("failed to open log file: %v", err)

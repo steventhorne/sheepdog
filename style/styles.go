@@ -12,16 +12,14 @@ var (
 				Border(lipgloss.NormalBorder(), false, false, true, false)
 
 	StyleList = lipgloss.NewStyle().
-			Width(WidthSidenav).
-			Padding(0, PaddingSidenav, 0, 0)
+			Width(WidthSidenav)
 	StyleListHeader = lipgloss.NewStyle().
 			Width(WidthSidenav).
 			AlignHorizontal(lipgloss.Center).
 			Border(lipgloss.NormalBorder(), false, false, true, false)
 
 	StyleItem = lipgloss.NewStyle().
-			AlignHorizontal(lipgloss.Center).
-			Width(WidthSidenav - PaddingSidenavTotal)
+			Width(WidthSidenav)
 	StyleItemIdle = StyleItem.
 			Foreground(colorIdle)
 	StyleItemRunning = StyleItem.

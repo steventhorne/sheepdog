@@ -28,3 +28,23 @@ func TestStreamPipeToChan(t *testing.T) {
 		t.Fatalf("unexpected log level: %#v", entries)
 	}
 }
+
+func TestStreamPipeToChanDropsWhenFull(t *testing.T) {
+	ch := make(chan logEntry, 1)
+	r := io.NopCloser(strings.NewReader("foo\nbar\n"))
+
+	streamPipeToChan(r, ch, logInfo)
+	close(ch)
+
+	var entries []logEntry
+	for e := range ch {
+		entries = append(entries, e)
+	}
+
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(entries))
+	}
+	if entries[0].msg != "foo" {
+		t.Fatalf("unexpected log entry: %#v", entries)
+	}
+}
