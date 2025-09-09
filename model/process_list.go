@@ -215,7 +215,7 @@ func writeListViewForProcess(psb *strings.Builder, p *process, prefix string) {
 	}
 
 	itemStyle := style.StyleItem
-	switch p.status {
+	switch p.GetStatus() {
 	case statusIdle:
 		itemStyle = style.StyleItemIdle
 		sb.WriteString("   ")

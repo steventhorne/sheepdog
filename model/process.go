@@ -21,14 +21,14 @@ import (
 	"github.com/steventhorne/sheepdog/style"
 )
 
-type processStatus string
+type processStatus int
 
 const (
-	statusIdle    processStatus = "idle"
-	statusRunning processStatus = "running"
-	statusReady   processStatus = "ready"
-	statusExited  processStatus = "exited"
-	statusErrored processStatus = "errored"
+	statusIdle processStatus = iota
+	statusExited
+	statusReady
+	statusRunning
+	statusErrored
 )
 
 type logLevel string
@@ -58,16 +58,17 @@ func processTick(id uuid.UUID) tea.Cmd {
 }
 
 type process struct {
-	id         uuid.UUID
-	name       string
-	command    []string
-	autorun    bool
-	cwd        string
+	id          uuid.UUID
+	name        string
+	command     []string
+	autorun     bool
+	cwd         string
 	readyRegexp *regexp.Regexp
 
-	isGroup   bool
-	groupType string
-	children  []*process
+	isGroup           bool
+	groupType         string
+	children          []*process
+	startupChildIndex int
 
 	pty    pty.Pty
 	ctx    context.Context
@@ -102,26 +103,26 @@ func (m *process) String() string {
 
 func newProcess(config config.ProcessConfig) *process {
 	p := &process{
-		id:         uuid.New(),
-		name:       config.Name,
-		command:    config.Command,
-		autorun:    config.Autorun,
-		cwd:        config.Cwd,
+		id:          uuid.New(),
+		name:        config.Name,
+		command:     config.Command,
+		autorun:     config.Autorun,
+		cwd:         config.Cwd,
 		readyRegexp: nil,
-		isGroup:    len(config.Children) > 0,
-		groupType:  config.GroupType,
-		children:   make([]*process, 0, len(config.Children)),
-		status:     statusIdle,
-		inboxCh:    make(chan logEntry, logBufferSize),
-		statusCh:   make(chan processStatus, 10),
-		log:        make([]logEntry, 0, 100),
+		isGroup:     len(config.Children) > 0,
+		groupType:   config.GroupType,
+		children:    make([]*process, 0, len(config.Children)),
+		status:      statusIdle,
+		inboxCh:     make(chan logEntry, logBufferSize),
+		statusCh:    make(chan processStatus, 10),
+		log:         make([]logEntry, 0, 100),
 	}
 
 	if config.ReadyRegexp != "" {
 		rg, err := regexp.Compile(config.ReadyRegexp)
 		if err != nil {
 			p.log = append(p.log, logEntry{
-				msg: fmt.Sprintf("process %s has an invalid ready regexp", p.name),
+				msg:   fmt.Sprintf("process %s has an invalid ready regexp", p.name),
 				level: logError,
 			})
 		} else {
@@ -144,6 +145,20 @@ func (m *process) Init() tea.Cmd {
 	}
 
 	return nil
+}
+
+func (m *process) GetStatus() processStatus {
+	if m.isGroup {
+		s := statusIdle
+		for _, cp := range m.children {
+			cs := cp.GetStatus()
+			if cs > s {
+				s = cs
+			}
+		}
+		return s
+	}
+	return m.status
 }
 
 func (m *process) pullInbox() {
@@ -196,6 +211,15 @@ func (m *process) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			_, cmd := cp.Update(msg)
 			cmds = append(cmds, cmd)
 		}
+
+		if m.groupType == "sequential" && m.startupChildIndex < len(m.children) {
+			if m.children[m.startupChildIndex].GetStatus() == statusReady {
+				m.startupChildIndex++
+				if m.startupChildIndex < len(m.children) {
+					cmds = append(cmds, m.children[m.startupChildIndex].Run())
+				}
+			}
+		}
 	}
 
 	switch msg := msg.(type) {
@@ -244,9 +268,18 @@ func (m *process) FocusedView() string {
 }
 
 func (m *process) Run() tea.Cmd {
-	// TODO: allow groups to be run
 	if m.isGroup {
-		return nil
+		if m.groupType == "parallel" {
+			cmds := make([]tea.Cmd, 0, len(m.children)+1)
+			for _, cp := range m.children {
+				cmds = append(cmds, cp.Run())
+			}
+			cmds = append(cmds, processTick(m.id))
+			return tea.Batch(cmds...)
+		} else {
+			m.startupChildIndex = 0
+			return tea.Batch(m.children[0].Run(), processTick(m.id))
+		}
 	}
 
 	if m.status == statusRunning || m.status == statusReady {
@@ -450,6 +483,14 @@ func (m *process) RunPty() tea.Cmd {
 }
 
 func (m *process) Kill() tea.Cmd {
+	if m.isGroup {
+		for _, cp := range m.children {
+			cp.Kill()
+		}
+
+		return nil
+	}
+
 	if m.status != statusRunning && m.status != statusReady {
 		return nil
 	}
