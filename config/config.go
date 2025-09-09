@@ -12,13 +12,13 @@ type Config struct {
 }
 
 type ProcessConfig struct {
-	Name       string          `json:"name"`
-	Command    []string        `json:"command"`
-	Autorun    bool            `json:"autorun"`
-	Cwd        string          `json:"cwd"`
-	ReadyRegexp string          `json:"readyRegexp"`
-	Children   []ProcessConfig `json:"children"`
-	GroupType  string          `json:"GroupType"`
+	Name        string          `json:"name"`        // required
+	Command     []string        `json:"command"`     // required for non process groups
+	Autorun     bool            `json:"autorun"`     // optional
+	Cwd         string          `json:"cwd"`         // optional
+	ReadyRegexp string          `json:"readyRegexp"` // optional
+	Children    []ProcessConfig `json:"children"`    // required for process groups
+	GroupType   string          `json:"groupType"`   // required for process groups
 }
 
 func LoadConfig(path string) (Config, error) {

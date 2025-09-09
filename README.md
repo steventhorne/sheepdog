@@ -21,31 +21,43 @@ Alternatively, download a binary from the releases page.
 
 Create a `.sheepdog.json` file in your project directory that lists the processes you want to manage.
 
+Each process in the configuration is represented by a JSON object with the following fields:
+
 ```json
 {
   "processes": [
     {
-      "name": "server",
-      "command": ["go", "run", "./cmd/server"],
-      "autorun": true,
-      "cwd": "./"
-    },
-    {
-      "name": "client",
-      "command": ["npm", "run", "dev"],
-      "autorun": false,
-      "cwd": "web"
+      "name": "web",                           // required
+      "autorun": true,                         // optional
+      "cwd": "/opt/app",                       // optional
+      "groupType": "parallel",                 // required if this is a process group
+      "children": [                            // required if this is a process group
+        {
+          "name": "server",
+          "command": ["./bin/server", "-p80"], // required unless this is a process group
+          "readyRegexp": "listening on",       // optional
+        },
+        {
+          "name": "worker-1",
+          "command": ["./bin/worker"]
+        }
+      ]
     }
   ]
 }
 ```
 
-Fields in each entry:
+Field Reference
 
-- `name` – label shown in the UI
-- `command` – command and arguments to execute
-- `autorun` – whether to start automatically
-- `cwd` – working directory for the command
+| Field         | Type                     | Used in | Required | Description                                                                                                                                |
+| ------------- | ------------------------ | ------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `name`        | string                   | both    | yes      | Unique identifier for the process or group.                                                                                                |
+| `command`     | array of string          | process | yes      | Command and arguments to run the process. **Required for standalone processes; ignored for process groups.**                               |
+| `autorun`     | boolean                  | both    | no       | If true, the process is started automatically on launch. Defaults to `false`.                                                              |
+| `cwd`         | string                   | both    | no       | Working directory in which to run the process.                                                                                             |
+| `readyRegexp` | string (regex)           | process | no       | Regular expression to match against process output. Marks the process as "ready" when matched.                                             |
+| `children`    | array of `ProcessConfig` | group   | yes      | Recursive list of child processes. **Required for process groups; omitted for standalone processes.**                                      |
+| `groupType`   | string                   | group   | yes      | Defines the type of process group (e.g., `"parallel"`, `"sequential"`). **Required for process groups; omitted for standalone processes.** |
 
 ## Usage
 
@@ -57,7 +69,7 @@ Key bindings:
 - `ctrl+d` / `ctrl+u` - scroll up and down the log view
 - `r` – run the selected process
 - `x` – kill the selected process
-- `enter` - focus on the selected process
+- `enter` - focus on the selected process or expands/collapses the selected group
 - `ctrl+c` – quit the application
 
 ## Logging

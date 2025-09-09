@@ -221,7 +221,7 @@ func writeListViewForProcess(psb *strings.Builder, p *process, prefix string) {
 		sb.WriteString("   ")
 	case statusRunning:
 		itemStyle = style.StyleItemRunning
-		sb.WriteString(" R ")
+		sb.WriteString(" P ")
 	case statusReady:
 		itemStyle = style.StyleItemReady
 		sb.WriteString(" R ")
@@ -229,7 +229,7 @@ func writeListViewForProcess(psb *strings.Builder, p *process, prefix string) {
 		itemStyle = style.StyleItemErrored
 		sb.WriteString(" E ")
 	case statusExited:
-		sb.WriteString("   ")
+		sb.WriteString(" X ")
 	default:
 		sb.WriteString("   ")
 	}
