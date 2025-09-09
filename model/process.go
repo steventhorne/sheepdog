@@ -58,11 +58,12 @@ func processTick(id uuid.UUID) tea.Cmd {
 }
 
 type process struct {
-	id      uuid.UUID
-	name    string
-	command []string
-	autorun bool
-	cwd     string
+	id         uuid.UUID
+	name       string
+	command    []string
+	autorun    bool
+	cwd        string
+	readyRegexp *regexp.Regexp
 
 	isGroup   bool
 	groupType string
@@ -101,18 +102,31 @@ func (m *process) String() string {
 
 func newProcess(config config.ProcessConfig) *process {
 	p := &process{
-		id:        uuid.New(),
-		name:      config.Name,
-		command:   config.Command,
-		autorun:   config.Autorun,
-		cwd:       config.Cwd,
-		isGroup:   len(config.Children) > 0,
-		groupType: config.GroupType,
-		children:  make([]*process, 0, len(config.Children)),
-		status:    statusIdle,
-		inboxCh:   make(chan logEntry, logBufferSize),
-		statusCh:  make(chan processStatus, 10),
-		log:       make([]logEntry, 0, 100),
+		id:         uuid.New(),
+		name:       config.Name,
+		command:    config.Command,
+		autorun:    config.Autorun,
+		cwd:        config.Cwd,
+		readyRegexp: nil,
+		isGroup:    len(config.Children) > 0,
+		groupType:  config.GroupType,
+		children:   make([]*process, 0, len(config.Children)),
+		status:     statusIdle,
+		inboxCh:    make(chan logEntry, logBufferSize),
+		statusCh:   make(chan processStatus, 10),
+		log:        make([]logEntry, 0, 100),
+	}
+
+	if config.ReadyRegexp != "" {
+		rg, err := regexp.Compile(config.ReadyRegexp)
+		if err != nil {
+			p.log = append(p.log, logEntry{
+				msg: fmt.Sprintf("process %s has an invalid ready regexp", p.name),
+				level: logError,
+			})
+		} else {
+			p.readyRegexp = rg
+		}
 	}
 
 	return p
@@ -303,11 +317,14 @@ func (m *process) Run() tea.Cmd {
 		return nil
 	}
 
-	// TODO: make this running if the config has a ready check
-	m.status = statusReady
+	if m.readyRegexp != nil {
+		m.status = statusRunning
+	} else {
+		m.status = statusReady
+	}
 
-	go streamPipeToChan(stdout, m.inboxCh, logInfo)
-	go streamPipeToChan(stderr, m.inboxCh, logError)
+	go streamPipeToChan(stdout, m.inboxCh, m.readyRegexp, m.statusCh, logInfo)
+	go streamPipeToChan(stderr, m.inboxCh, m.readyRegexp, m.statusCh, logError)
 
 	go func() {
 		err := cmd.Wait()
@@ -410,7 +427,7 @@ func (m *process) RunPty() tea.Cmd {
 	// TODO: make this running if the config has a ready check
 	m.status = statusReady
 
-	go streamPipeToChan(m.pty, m.inboxCh, logInfo)
+	go streamPipeToChan(m.pty, m.inboxCh, m.readyRegexp, m.statusCh, logInfo)
 
 	go func() {
 		err := cmd.Wait()
@@ -459,11 +476,23 @@ func stripControlSequencesButKeepSGR(input string) string {
 	})
 }
 
-func streamPipeToChan(r io.ReadCloser, ch chan logEntry, level logLevel) {
+func stripControlSequences(input string) string {
+	return ansiSequence.ReplaceAllString(input, "")
+}
+
+func streamPipeToChan(r io.ReadCloser, ch chan logEntry, readyRegex *regexp.Regexp, statusCh chan processStatus, level logLevel) {
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
 		line := scanner.Text()
 		clean := stripControlSequencesButKeepSGR(line)
+
+		if readyRegex != nil {
+			superClean := stripControlSequences(line)
+			match := readyRegex.Match([]byte(superClean))
+			if match {
+				statusCh <- statusReady
+			}
+		}
 
 		entry := logEntry{msg: clean, level: level}
 		select {
