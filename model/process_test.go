@@ -8,9 +8,10 @@ import (
 
 func TestStreamPipeToChan(t *testing.T) {
 	ch := make(chan logEntry, 2)
+	statusCh := make(chan processStatus, 1)
 	r := io.NopCloser(strings.NewReader("foo\nbar\n"))
 
-	streamPipeToChan(r, ch, logInfo)
+	streamPipeToChan(r, ch, nil, statusCh, logInfo)
 	close(ch)
 
 	var entries []logEntry
@@ -31,9 +32,10 @@ func TestStreamPipeToChan(t *testing.T) {
 
 func TestStreamPipeToChanDropsWhenFull(t *testing.T) {
 	ch := make(chan logEntry, 1)
+	statusCh := make(chan processStatus, 1)
 	r := io.NopCloser(strings.NewReader("foo\nbar\n"))
 
-	streamPipeToChan(r, ch, logInfo)
+	streamPipeToChan(r, ch, nil, statusCh, logInfo)
 	close(ch)
 
 	var entries []logEntry

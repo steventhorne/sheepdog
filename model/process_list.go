@@ -13,14 +13,14 @@ import (
 )
 
 type processList struct {
-	processes       []*process
+	processes            []*process
 	selectedProcessIndex int
-	selectedProcess *process
+	selectedProcess      *process
 }
 
 func newProcessList(config config.Config) processList {
 	pl := processList{
-		processes:     make([]*process, 0),
+		processes: make([]*process, 0),
 	}
 
 	for _, pConfig := range config.Processes {
@@ -75,6 +75,16 @@ func (m *processList) getProcessFromConfig(pConfig config.ProcessConfig, parent 
 
 func (m *processList) GetSelectedProcess() *process {
 	return m.selectedProcess
+}
+
+func (m *processList) AllStopped() bool {
+	for _, p := range m.processes {
+		s := p.GetStatus()
+		if s == statusRunning || s == statusReady {
+			return false
+		}
+	}
+	return true
 }
 
 func (m *processList) Init() tea.Cmd {
@@ -221,7 +231,7 @@ func writeListViewForProcess(psb *strings.Builder, p *process, prefix string) {
 		sb.WriteString("   ")
 	case statusRunning:
 		itemStyle = style.StyleItemRunning
-		sb.WriteString(" P ")
+		sb.WriteString(" S ")
 	case statusReady:
 		itemStyle = style.StyleItemReady
 		sb.WriteString(" R ")

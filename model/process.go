@@ -31,6 +31,23 @@ const (
 	statusErrored
 )
 
+func (s processStatus) String() string {
+	switch s {
+	case statusIdle:
+		return "idle    "
+	case statusExited:
+		return "exited  "
+	case statusReady:
+		return "ready   "
+	case statusRunning:
+		return "starting"
+	case statusErrored:
+		return "error   "
+	default:
+		return "null    "
+	}
+}
+
 type logLevel string
 
 const (
@@ -92,6 +109,12 @@ func (m *process) IsFocused() bool {
 }
 
 func (m *process) Cancel() {
+	if m.isGroup {
+		for _, cp := range m.children {
+			cp.Cancel()
+		}
+	}
+
 	if m.cancel != nil {
 		m.cancel()
 	}
@@ -260,11 +283,24 @@ func (m *process) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *process) View() string {
-	return style.StyleDetails.Render(lipgloss.JoinVertical(lipgloss.Center, style.StyleDetailsHeader.Width(m.viewport.Width).Render(strings.Join(m.command, " ")), m.viewport.View()))
+	if m.isGroup {
+		return style.StyleDetails.Render(lipgloss.JoinVertical(lipgloss.Center, style.StyleDetailsHeader.Width(m.viewport.Width).Render(fmt.Sprintf("%s ##  %s", m.GetStatus(), m.name)), m.FocusedView()))
+	} else {
+		return style.StyleDetails.Render(lipgloss.JoinVertical(lipgloss.Center, style.StyleDetailsHeader.Width(m.viewport.Width).Render(fmt.Sprintf("%s ##  %s", m.GetStatus(), strings.Join(m.command, " "))), m.FocusedView()))
+	}
 }
 
 func (m *process) FocusedView() string {
-	return m.viewport.View()
+	if m.isGroup {
+
+		var sb strings.Builder
+		for _, cp := range m.children {
+			fmt.Fprintf(&sb, "%s ##  %s\n", cp.GetStatus(), cp.name)
+		}
+		return lipgloss.NewStyle().Width(m.viewport.Width).Height(m.viewport.Height).Render(sb.String())
+	} else {
+		return m.viewport.View()
+	}
 }
 
 func (m *process) Run() tea.Cmd {

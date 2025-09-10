@@ -13,6 +13,7 @@ type model struct {
 	processes processList
 	width     int
 	height    int
+	quitting  bool
 }
 
 func NewModel(config config.Config) model {
@@ -38,11 +39,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch {
 		case key.Matches(msg, input.DefaultKeyMap.Quit):
-			cmds = append(cmds, tea.Quit)
+			m.quitting = true
 		}
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+	}
+
+	if m.quitting && m.processes.AllStopped() {
+		cmds = append(cmds, tea.Quit)
 	}
 
 	return m, tea.Batch(cmds...)
