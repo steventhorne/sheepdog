@@ -560,18 +560,21 @@ func stripControlSequences(input string) string {
 func streamPipeToChan(r io.ReadCloser, ch chan logEntry, readyRegex *regexp.Regexp, statusCh chan processStatus, level logLevel) {
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
+		isReady := false
 		line := scanner.Text()
-		clean := stripControlSequencesButKeepSGR(line)
+		// TODO: re-enable this once we use PTYs
+		// clean := stripControlSequencesButKeepSGR(line)
 
-		if readyRegex != nil {
+		if readyRegex != nil && !isReady {
 			superClean := stripControlSequences(line)
 			match := readyRegex.Match([]byte(superClean))
 			if match {
 				statusCh <- statusReady
+				isReady = true
 			}
 		}
 
-		entry := logEntry{msg: clean, level: level}
+		entry := logEntry{msg: line, level: level}
 		select {
 		case ch <- entry:
 		default:
