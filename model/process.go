@@ -39,7 +39,7 @@ func (s processStatus) String() string {
 	case statusReady:
 		return "ready   "
 	case statusRunning:
-		return "starting"
+		return "running "
 	case statusErrored:
 		return "error   "
 	default:
