@@ -401,10 +401,7 @@ func (m *process) Run() tea.Cmd {
 		cmd.Dir = cwd
 	}
 
-	stdout, _ := cmd.StdoutPipe()
-	stderr, _ := cmd.StderrPipe()
-
-	err = cmd.Start()
+	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		m.inboxCh <- logEntry{
 			msg:   err.Error(),
@@ -436,10 +433,14 @@ func (m *process) Run() tea.Cmd {
 		return nil
 	}
 
-	// TODO: make this running if the config has a ready check
-	m.status = statusReady
+	if m.readyRegexp != nil {
+		m.status = statusRunning
+	} else {
+		m.status = statusReady
+	}
 
-	go streamPipeToChan(m.pty, m.inboxCh, m.readyRegexp, m.statusCh, logInfo)
+	go streamPipeToChan(stdout, m.inboxCh, m.readyRegexp, m.statusCh, logInfo)
+	go streamPipeToChan(stderr, m.inboxCh, m.readyRegexp, m.statusCh, logError)
 
 	go func() {
 		err := cmd.Wait()
