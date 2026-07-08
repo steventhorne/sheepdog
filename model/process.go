@@ -59,6 +59,14 @@ const (
 // lines are dropped to keep the reader from blocking.
 const logBufferSize = 1024
 
+// maxLogLines is the number of log lines retained in memory per process;
+// older lines are discarded as new ones arrive.
+const maxLogLines = 1024
+
+// maxLogLineBytes is the maximum length of a single log line the scanner
+// will accept before reporting an error.
+const maxLogLineBytes = 1024 * 1024
+
 type logEntry struct {
 	msg   string
 	level logLevel
@@ -192,6 +200,11 @@ func (m *process) pullInbox() {
 		case entry := <-m.inboxCh:
 			m.log = append(m.log, entry)
 		default:
+			if len(m.log) > maxLogLines {
+				trimmed := make([]logEntry, maxLogLines)
+				copy(trimmed, m.log[len(m.log)-maxLogLines:])
+				m.log = trimmed
+			}
 			return
 		}
 	}
@@ -238,11 +251,23 @@ func (m *process) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if m.groupType == "sequential" && m.startupChildIndex < len(m.children) {
-			if m.children[m.startupChildIndex].GetStatus() == statusReady {
+			cp := m.children[m.startupChildIndex]
+			switch cp.GetStatus() {
+			case statusReady, statusExited:
 				m.startupChildIndex++
 				if m.startupChildIndex < len(m.children) {
 					cmds = append(cmds, m.children[m.startupChildIndex].Run())
 				}
+			case statusErrored:
+				entry := logEntry{
+					msg:   fmt.Sprintf("sequential group %q halted: %q errored before becoming ready", m.name, cp.name),
+					level: logError,
+				}
+				select {
+				case cp.inboxCh <- entry:
+				default:
+				}
+				m.startupChildIndex = len(m.children)
 			}
 		}
 	}
@@ -563,6 +588,7 @@ func stripControlSequences(input string) string {
 
 func streamPipeToChan(r io.ReadCloser, ch chan logEntry, readyRegex *regexp.Regexp, statusCh chan processStatus, level logLevel) {
 	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 0, 64*1024), maxLogLineBytes)
 	isReady := false
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -585,6 +611,16 @@ func streamPipeToChan(r io.ReadCloser, ch chan logEntry, readyRegex *regexp.Rege
 			// Drop the log line if the buffer is full to avoid
 			// blocking the reader. This ensures the process stdout
 			// is continually drained even when the UI is busy.
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		entry := logEntry{
+			msg:   fmt.Sprintf("log streaming stopped: %v", err),
+			level: logError,
+		}
+		select {
+		case ch <- entry:
+		default:
 		}
 	}
 }
