@@ -1,0 +1,57 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [linux, darwin, windows]
+        arch: [amd64, arm64]
+        exclude:           # exclude incompatible combos
+          - os: windows
+            arch: arm64    # Windows arm64 not built here
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history needed to verify the tag is on master
+
+      - name: Verify tag is on master
+        run: |
+          git fetch origin master
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/master; then
+            echo "Tag ${GITHUB_REF_NAME} does not point to a commit on master; skipping release."
+            exit 1
+          fi
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.23
+
+      - name: Build binary
+        run: |
+          mkdir -p dist
+          EXT=""
+          if [ "${{ matrix.os }}" = "windows" ]; then EXT=".exe"; fi
+          OUTPUT="sheepdog-${{ matrix.os }}-${{ matrix.arch }}$EXT"
+          GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -ldflags "-X main.version=${GITHUB_REF_NAME}" -o "dist/$OUTPUT"
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            dist/sheepdog-${{ matrix.os }}-${{ matrix.arch }}*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
