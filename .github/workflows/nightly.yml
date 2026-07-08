@@ -31,7 +31,8 @@ jobs:
           EXT=""
           if [ "${{ matrix.os }}" = "windows" ]; then EXT=".exe"; fi
           OUTPUT="sheepdog-${{ matrix.os }}-${{ matrix.arch }}$EXT"
-          GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -o "dist/$OUTPUT"
+          VERSION="nightly-$(date -u +%Y%m%d)-$(git rev-parse --short HEAD)"
+          GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -ldflags "-X main.version=$VERSION" -o "dist/$OUTPUT"
 
       - name: Upload to nightly release
         uses: softprops/action-gh-release@v2

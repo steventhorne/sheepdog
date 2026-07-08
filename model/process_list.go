@@ -16,6 +16,7 @@ type processList struct {
 	processes            []*process
 	selectedProcessIndex int
 	selectedProcess      *process
+	version              string
 }
 
 func newProcessList(config config.Config) processList {
@@ -276,5 +277,5 @@ func (m *processList) View() string {
 		writeListViewForProcess(&sb, p, "")
 	}
 
-	return fmt.Sprintf("\n%s\n%s", style.StyleListHeader.Render("Processes"), style.StyleList.Render(sb.String()))
+	return fmt.Sprintf("%s\n%s\n%s", style.StyleVersion.Render("sheepdog "+m.version), style.StyleListHeader.Render("Processes"), style.StyleList.Render(sb.String()))
 }

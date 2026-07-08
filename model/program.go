@@ -16,10 +16,11 @@ type model struct {
 	quitting  bool
 }
 
-func NewModel(config config.Config) model {
+func NewModel(config config.Config, version string) model {
 	m := model{
 		processes: newProcessList(config),
 	}
+	m.processes.version = version
 
 	return m
 }

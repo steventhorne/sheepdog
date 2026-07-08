@@ -6,11 +6,27 @@ import (
 	"log"
 	"log/slog"
 	"os"
+	"runtime/debug"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/steventhorne/sheepdog/config"
 	"github.com/steventhorne/sheepdog/model"
 )
+
+// version is set at build time via -ldflags "-X main.version=...".
+var version = "dev"
+
+func resolveVersion() string {
+	if version != "dev" {
+		return version
+	}
+	// Installed via `go install module@version` — the module version is
+	// recorded in the build info even without ldflags.
+	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		return info.Main.Version
+	}
+	return version
+}
 
 func main() {
 	title := "sheepdog"
@@ -30,7 +46,7 @@ func main() {
 		panic(err)
 	}
 
-	m := model.NewModel(conf)
+	m := model.NewModel(conf, resolveVersion())
 	if _, err := tea.NewProgram(m, tea.WithAltScreen()).Run(); err != nil {
 		fmt.Printf("Whoops, there was an error: %v\n", err)
 		os.Exit(1)

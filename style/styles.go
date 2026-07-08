@@ -11,6 +11,9 @@ var (
 				AlignHorizontal(lipgloss.Center).
 				Border(lipgloss.NormalBorder(), false, false, true, false)
 
+	StyleVersion = lipgloss.NewStyle().
+			Foreground(colorGray)
+
 	StyleList = lipgloss.NewStyle().
 			Width(WidthSidenav)
 	StyleListHeader = lipgloss.NewStyle().
