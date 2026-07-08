@@ -23,8 +23,9 @@ func newProcessList(config config.Config) processList {
 		processes: make([]*process, 0),
 	}
 
+	seen := make(map[string]struct{})
 	for _, pConfig := range config.Processes {
-		p := pl.getProcessFromConfig(pConfig, nil)
+		p := pl.getProcessFromConfig(pConfig, nil, seen)
 
 		pl.processes = append(pl.processes, p)
 	}
@@ -37,7 +38,7 @@ func newProcessList(config config.Config) processList {
 	return pl
 }
 
-func (m *processList) getProcessFromConfig(pConfig config.ProcessConfig, parent *process) *process {
+func (m *processList) getProcessFromConfig(pConfig config.ProcessConfig, parent *process, seen map[string]struct{}) *process {
 	isCommand := len(pConfig.Command) > 0
 	isGroup := pConfig.GroupType != "" && len(pConfig.Children) > 0
 	if isCommand && isGroup {
@@ -51,6 +52,11 @@ func (m *processList) getProcessFromConfig(pConfig config.ProcessConfig, parent 
 	if isGroup && pConfig.GroupType != "sequential" && pConfig.GroupType != "parallel" {
 		log.Fatalf("Invalid group type for group %s", pConfig.Name)
 	}
+
+	if _, ok := seen[pConfig.Name]; ok {
+		log.Fatalf("Duplicate process name %q. Names must be unique", pConfig.Name)
+	}
+	seen[pConfig.Name] = struct{}{}
 
 	p := newProcess(pConfig)
 	p.isGroup = isGroup
@@ -66,7 +72,7 @@ func (m *processList) getProcessFromConfig(pConfig config.ProcessConfig, parent 
 
 	if isGroup {
 		for _, cpConfig := range pConfig.Children {
-			m.getProcessFromConfig(cpConfig, p)
+			m.getProcessFromConfig(cpConfig, p, seen)
 		}
 	}
 
