@@ -52,6 +52,36 @@ func TestStreamPipeToChanSignalsReadyOnce(t *testing.T) {
 	}
 }
 
+func TestStreamPipeToChanStripsOscSequences(t *testing.T) {
+	ch := make(chan logEntry, 4)
+	statusCh := make(chan processStatus, 1)
+	r := io.NopCloser(strings.NewReader(
+		"\x1b]0;npm run dev\afoo\n" +
+			"bar\x1b]2;title\x1b\\baz\n" +
+			"\x1b[31mred\x1b[0m\x1b]0;unterminated\n"))
+
+	streamPipeToChan(r, ch, nil, statusCh, logInfo)
+	close(ch)
+
+	var entries []logEntry
+	for e := range ch {
+		entries = append(entries, e)
+	}
+
+	if len(entries) != 3 {
+		t.Fatalf("expected 3 entries, got %d: %#v", len(entries), entries)
+	}
+	if entries[0].msg != "foo" {
+		t.Fatalf("expected BEL-terminated OSC to be stripped, got %q", entries[0].msg)
+	}
+	if entries[1].msg != "barbaz" {
+		t.Fatalf("expected ST-terminated OSC to be stripped, got %q", entries[1].msg)
+	}
+	if entries[2].msg != "\x1b[31mred\x1b[0m" {
+		t.Fatalf("expected color codes kept and unterminated OSC stripped, got %q", entries[2].msg)
+	}
+}
+
 func TestStreamPipeToChanDropsWhenFull(t *testing.T) {
 	ch := make(chan logEntry, 1)
 	statusCh := make(chan processStatus, 1)

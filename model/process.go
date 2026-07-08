@@ -481,6 +481,12 @@ func (m *process) Kill() tea.Cmd {
 
 var ansiSequence = regexp.MustCompile(`\x1b\[[0-9;?]*[ -~]|\x1b\][^\a]*\a|\x1b\][^\x1b]*\x1b\\`)
 
+// oscSequence matches OSC escape sequences (terminal title changes, etc.),
+// including ones left unterminated when a line is split by the scanner. These
+// must not reach the viewport or they leak through to the host terminal and
+// override sheepdog's own window title.
+var oscSequence = regexp.MustCompile(`\x1b\](?:[^\a\x1b]*\a|[^\x1b]*\x1b\\|[^\a\x1b]*$)`)
+
 func stripControlSequences(input string) string {
 	return ansiSequence.ReplaceAllString(input, "")
 }
@@ -490,7 +496,7 @@ func streamPipeToChan(r io.ReadCloser, ch chan logEntry, readyRegex *regexp.Rege
 	scanner.Buffer(make([]byte, 0, 64*1024), maxLogLineBytes)
 	isReady := false
 	for scanner.Scan() {
-		line := scanner.Text()
+		line := oscSequence.ReplaceAllString(scanner.Text(), "")
 
 		if readyRegex != nil && !isReady {
 			superClean := stripControlSequences(line)

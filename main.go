@@ -29,7 +29,7 @@ func resolveVersion() string {
 }
 
 func main() {
-	title := "sheepdog"
+	title := "Sheepdog"
 	fmt.Printf("\033]0;%s\007", title)
 
 	f, err := os.OpenFile(".sheepdog.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
