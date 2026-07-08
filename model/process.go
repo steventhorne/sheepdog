@@ -335,10 +335,11 @@ func (m *process) Run() tea.Cmd {
 	if err != nil {
 		m.inboxCh <- logEntry{
 			msg:   err.Error(),
-			level: logInfo,
+			level: logError,
 		}
 		m.statusCh <- statusErrored
 		m.loadViewportFromInbox()
+		return nil
 	}
 
 	var cmd *Cmd
@@ -445,10 +446,11 @@ func (m *process) RunPty() tea.Cmd {
 	if err != nil {
 		m.inboxCh <- logEntry{
 			msg:   err.Error(),
-			level: logInfo,
+			level: logError,
 		}
 		m.statusCh <- statusErrored
 		m.loadViewportFromInbox()
+		return nil
 	}
 
 	var cmd *pty.Cmd
