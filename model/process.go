@@ -330,6 +330,9 @@ func (m *process) FocusedView() string {
 
 func (m *process) Run() tea.Cmd {
 	if m.isGroup {
+		if s := m.GetStatus(); s == statusRunning || s == statusReady {
+			return nil
+		}
 		if m.groupType == "parallel" {
 			cmds := make([]tea.Cmd, 0, len(m.children)+1)
 			for _, cp := range m.children {
