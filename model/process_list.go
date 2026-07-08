@@ -199,11 +199,15 @@ func (m *processList) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.selectedProcessIndex = tmp
 			}
 		case key.Matches(msg, input.DefaultKeyMap.Run):
-			cmds = append(cmds, m.selectedProcess.Run())
+			if m.selectedProcess != nil {
+				cmds = append(cmds, m.selectedProcess.Run())
+			}
 		case key.Matches(msg, input.DefaultKeyMap.Kill):
-			cmd := m.selectedProcess.Kill()
-			if cmd != nil {
-				cmds = append(cmds, cmd)
+			if m.selectedProcess != nil {
+				cmd := m.selectedProcess.Kill()
+				if cmd != nil {
+					cmds = append(cmds, cmd)
+				}
 			}
 		}
 	}
