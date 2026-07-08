@@ -162,9 +162,11 @@ func (m *process) Init() tea.Cmd {
 	}
 
 	if m.isGroup {
+		cmds := make([]tea.Cmd, 0, len(m.children))
 		for _, cp := range m.children {
-			cp.Init()
+			cmds = append(cmds, cp.Init())
 		}
+		return tea.Batch(cmds...)
 	}
 
 	return nil
