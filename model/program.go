@@ -62,9 +62,3 @@ func (m model) View() string {
 	}
 	return lipgloss.JoinHorizontal(lipgloss.Top, m.processes.View(), m.processes.GetSelectedProcess().View())
 }
-
-func (m model) CleanUp() {
-	for _, p := range m.processes.processes {
-		p.CleanUp()
-	}
-}

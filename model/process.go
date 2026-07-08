@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aymanbagabas/go-pty"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -95,7 +94,6 @@ type process struct {
 	children          []*process
 	startupChildIndex int
 
-	pty    pty.Pty
 	ctx    context.Context
 	cancel context.CancelFunc
 
@@ -413,63 +411,7 @@ func (m *process) Run() tea.Cmd {
 		m.loadViewportFromInbox()
 		return nil
 	}
-
-	if m.readyRegexp != nil {
-		m.status = statusRunning
-	} else {
-		m.status = statusReady
-	}
-
-	go streamPipeToChan(stdout, m.inboxCh, m.readyRegexp, m.statusCh, logInfo)
-	go streamPipeToChan(stderr, m.inboxCh, m.readyRegexp, m.statusCh, logError)
-
-	go func() {
-		err := cmd.Wait()
-		if err != nil {
-			m.inboxCh <- logEntry{
-				msg:   fmt.Sprintf("%v", err),
-				level: logError,
-			}
-			m.statusCh <- statusErrored
-		} else {
-			m.inboxCh <- logEntry{
-				msg:   "exited with code 0",
-				level: logInfo,
-			}
-			m.statusCh <- statusExited
-		}
-	}()
-
-	return processTick(m.id)
-}
-
-func (m *process) RunPty() tea.Cmd {
-	if m.status == statusRunning || m.status == statusReady {
-		m.inboxCh <- logEntry{
-			msg:   fmt.Sprintf("Process %q is already running.", m.name),
-			level: logError,
-		}
-		return nil
-	}
-
-	m.ctx, m.cancel = context.WithCancel(context.Background())
-
-	var err error
-	if m.pty == nil {
-		m.pty, err = pty.New()
-		if err != nil {
-			m.inboxCh <- logEntry{
-				msg:   err.Error(),
-				level: logError,
-			}
-			m.statusCh <- statusErrored
-			m.loadViewportFromInbox()
-		}
-		m.pty.Resize(10000, 1)
-	}
-
-	// resolve cmd name
-	cmdPath, err := exec.LookPath(m.command[0])
+	stderr, err := cmd.StderrPipe()
 	if err != nil {
 		m.inboxCh <- logEntry{
 			msg:   err.Error(),
@@ -478,37 +420,6 @@ func (m *process) RunPty() tea.Cmd {
 		m.statusCh <- statusErrored
 		m.loadViewportFromInbox()
 		return nil
-	}
-
-	var cmd *pty.Cmd
-	if len(m.command) > 1 {
-		cmd = m.pty.CommandContext(m.ctx, cmdPath, m.command[1:]...)
-	} else {
-		cmd = m.pty.CommandContext(m.ctx, cmdPath)
-	}
-
-	cmd.Env = os.Environ()
-
-	if m.cwd != "" {
-		if filepath.IsAbs(m.cwd) {
-			cmd.Dir = m.cwd
-		} else {
-			cwd, err := os.Getwd()
-			if err == nil {
-				cmd.Dir = filepath.Join(cwd, m.cwd)
-			}
-		}
-	} else {
-		cwd, err := os.Getwd()
-		if err != nil {
-			m.inboxCh <- logEntry{
-				msg:   err.Error(),
-				level: logError,
-			}
-			m.statusCh <- statusErrored
-			m.loadViewportFromInbox()
-		}
-		cmd.Dir = cwd
 	}
 
 	err = cmd.Start()
@@ -564,23 +475,7 @@ func (m *process) Kill() tea.Cmd {
 	return nil
 }
 
-func (m *process) CleanUp() {
-	if m.pty != nil {
-		m.pty.Close()
-	}
-}
-
 var ansiSequence = regexp.MustCompile(`\x1b\[[0-9;?]*[ -~]|\x1b\][^\a]*\a|\x1b\][^\x1b]*\x1b\\`)
-
-func stripControlSequencesButKeepSGR(input string) string {
-	return ansiSequence.ReplaceAllStringFunc(input, func(seq string) string {
-		// Keep SGR sequences like ESC [ 31 m
-		if strings.HasSuffix(seq, "m") {
-			return seq
-		}
-		return ""
-	})
-}
 
 func stripControlSequences(input string) string {
 	return ansiSequence.ReplaceAllString(input, "")
@@ -592,8 +487,6 @@ func streamPipeToChan(r io.ReadCloser, ch chan logEntry, readyRegex *regexp.Rege
 	isReady := false
 	for scanner.Scan() {
 		line := scanner.Text()
-		// TODO: re-enable this once we use PTYs
-		// clean := stripControlSequencesButKeepSGR(line)
 
 		if readyRegex != nil && !isReady {
 			superClean := stripControlSequences(line)

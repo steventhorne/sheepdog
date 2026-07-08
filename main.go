@@ -35,6 +35,4 @@ func main() {
 		fmt.Printf("Whoops, there was an error: %v\n", err)
 		os.Exit(1)
 	}
-
-	m.CleanUp()
 }
