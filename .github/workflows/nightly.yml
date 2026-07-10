@@ -5,9 +5,13 @@ on:
     - cron: '0 0 * * *'  # nightly UTC
   workflow_dispatch:      # allow manual trigger
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     strategy:
       matrix:
         os: [linux, darwin, windows]
